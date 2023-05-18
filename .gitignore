@@ -1,0 +1,4 @@
+supabase/functions/analytics/config.json
+.vscode/
+supabase/config.toml
+supabase/seed.sql
