@@ -12,15 +12,32 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  const { name } = await req.json()
-  const data = {
-    message: `Hello ${name}!`,
+  const data = await req.json()
+  data.agent = req.headers.get("user-agent");
+  console.log(data);
+
+  let row = {
+    
   }
+
+
+  let {error} = await supabase.from("paradaux_analytics")
+          .insert(data);
+
+  if (error) {
+    return new Response(JSON.stringify({
+      "error": error
+    }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    })
+  }
+
 
   return new Response(
     JSON.stringify(data),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-  )
+  )  
 })
 
 // To invoke:
