@@ -1,25 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { PostgrestError, createClient } from "https://esm.sh/@supabase/supabase-js@2.22.0";
-import { corsHeaders } from '../_shared/cors.ts';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.22.0";
+import log from "../_shared/log.ts"
+import { respondJson } from "../_shared/respond.ts";
+import { corsHeaders } from "../_shared/cors.ts";
+import { duplicateError, invalidBody } from "../_shared/errors.ts";
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
-const dateToSimpleTS = (date: Date): string => {
-  return `${date.getDate().toString().padStart(2, '0')}-${(date.getMonth() + 1).toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
-}
-
-const log = (data: string|object|PostgrestError|null, error: boolean = false): void => {
-  if (data == null) return;
-  const message = `[${dateToSimpleTS(new Date())}] Analytics: ${JSON.stringify(data)}`;
-  error ? console.error(message) : console.log(message);
-}
-
-const createErrorResponse = (message: string, status: number): Response => {
-  return new Response(JSON.stringify({error: message}), {
-    status: status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" }
-  });
-}
 
 const handleBodyData = async (req: any): Promise<any> => {
   const body = await req.json();
@@ -35,14 +21,12 @@ serve(async (req) => {
   const body = await handleBodyData(req);
   log('New Request at /analytics:\n' + JSON.stringify(body));
 
-  const duplicateErrorMessage = 'Duplicate entry, this event has already been submitted in the past 15 mins';
-  
   if (body.event_type === "start") {
     const { data, error } = await supabase.rpc('get_start_count_past_15_minutes');
     log(data);
     log(error, true);
     if (data.some((obj: any) => obj.id === body.id)) {
-      return createErrorResponse(duplicateErrorMessage, 409);
+      return respondJson(duplicateError, 409);
     }
   }
 
@@ -56,19 +40,17 @@ serve(async (req) => {
     log(data);
     log(error, true);
     if (data === true) {
-      return createErrorResponse(duplicateErrorMessage, 409);
+      return respondJson(duplicateError, 409);
     }
   }
 
-  const {error} = await supabase.from("paradaux_analytics")
-                                .insert(body);
+  const { error } = await supabase.from("paradaux_analytics").insert(body);
 
   if (error) {
-    return createErrorResponse("Invalid data provided", 400);
+    return respondJson(invalidBody, 400);
   }
 
-  return new Response(
-    JSON.stringify(body),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 201 },
-  );  
+  return respondJson({
+    "message": "Created event entry succesfully."
+  }, 201)
 });
